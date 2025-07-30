@@ -41,7 +41,7 @@ function drawFOV(angleDeg = 0, fovDeg = 90) {
 
   const radius = 500; // Distance (pixels) du cône
 
-  const angleRad = angleDeg * Math.PI / 180;
+  const angleRad = (angleDeg - 90) * Math.PI / 180;
   const halfFovRad = fovDeg / 2 * Math.PI / 180;
 
   const startAngle = angleRad - halfFovRad;
