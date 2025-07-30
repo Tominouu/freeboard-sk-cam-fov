@@ -3,6 +3,38 @@ console.log("[FOV OVERLAY] Chargement avec gestion de disparition...");
 let overlay = null;
 let mapCanvas = null;
 
+// Données du bateau
+let boatData = {
+  heading: 0 // en degrés
+};
+
+// Connexion WebSocket à Signal K
+const sk = new WebSocket('ws://localhost:3000/signalk/v1/stream?subscribe=none');
+
+sk.onopen = () => {
+  console.log("[FOV OVERLAY] Connexion Signal K établie");
+  sk.send(JSON.stringify({
+    context: "vessels.self",
+    subscribe: [
+      { path: "navigation.headingTrue", period: 500 }
+    ]
+  }));
+};
+
+sk.onmessage = (msg) => {
+  const data = JSON.parse(msg.data);
+  if (data.updates) {
+    data.updates.forEach(update => {
+      update.values.forEach(v => {
+        if (v.path === "navigation.headingTrue" && v.value != null) {
+          // Radians → Degrés
+          boatData.heading = v.value * 180 / Math.PI;
+        }
+      });
+    });
+  }
+};
+
 function findMapCanvas() {
   const canvas = document.querySelector("canvas");
   if (canvas && canvas.offsetWidth > 0 && canvas.offsetHeight > 0) {
@@ -39,8 +71,7 @@ function drawFOV(angleDeg = 0, fovDeg = 90) {
   const centerX = overlay.width / 2;
   const centerY = overlay.height / 2;
 
-  const radius = 500; // Distance (pixels) du cône
-
+  const radius = 500; // pixels
   const angleRad = (angleDeg - 90) * Math.PI / 180;
   const halfFovRad = fovDeg / 2 * Math.PI / 180;
 
@@ -61,7 +92,6 @@ function drawFOV(angleDeg = 0, fovDeg = 90) {
   ctx.fill();
 }
 
-
 function maintainOverlay() {
   setInterval(() => {
     const current = document.getElementById("fov-overlay");
@@ -77,10 +107,9 @@ function maintainOverlay() {
       createOverlay();
     }
 
-    drawFOV(0); // <- Angle fixe pour l’instant (0° = nord / haut)
+    drawFOV(boatData.heading || 0); // Heading dynamique
   }, 500);
 }
-
 
 (function init() {
   console.log("[FOV OVERLAY] Initialisation...");
