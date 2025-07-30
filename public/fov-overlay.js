@@ -2,7 +2,8 @@ console.log("[FOV OVERLAY] Initialisation avec WebSocket dynamique...");
 
 let overlay = null;
 let mapCanvas = null;
-let latestBearing = 0; // Valeur par défaut
+let latestBearing = 0;      // en degrés
+let latestHeading = 0;      // en degrés
 let connected = false;
 
 function findMapCanvas() {
@@ -37,9 +38,8 @@ function drawFOV(angleDeg = 0, fovDeg = 90) {
 
   const centerX = overlay.width / 2;
   const centerY = overlay.height / 2;
-  const radius = 500; // Longueur du cône en pixels
+  const radius = 500;
 
-  // 0° = droite → pour tourner à partir du haut, on décale de -90°
   const angleRad = (angleDeg - 90) * Math.PI / 180;
   const halfFovRad = (fovDeg / 2) * Math.PI / 180;
 
@@ -72,8 +72,10 @@ function maintainOverlay() {
       createOverlay();
     }
 
-    drawFOV(latestBearing); // Mise à jour du FOV avec la dernière valeur reçue
-  }, 100); // Rafraîchissement 10x/seconde
+    // Calcule l'angle absolu combiné
+    const combined = (latestHeading + latestBearing) % 360;
+    drawFOV(combined);
+  }, 100); // 10x/sec
 }
 
 function connectWebSocket() {
@@ -88,8 +90,8 @@ function connectWebSocket() {
     try {
       const data = JSON.parse(event.data);
       if ("rel_bearing" in data) {
-        latestBearing = data.rel_bearing; // Affectation dynamique
-        console.log("[FOV WS] Bearing reçu :", latestBearing.toFixed(2));
+        latestBearing = data.rel_bearing;
+        console.log("[FOV WS] rel_bearing reçu :", latestBearing.toFixed(2));
       }
     } catch (e) {
       console.warn("[FOV WS] Erreur JSON:", e);
@@ -99,12 +101,52 @@ function connectWebSocket() {
   ws.addEventListener("close", () => {
     console.warn("[FOV WS] Déconnexion WebSocket ❌");
     connected = false;
-    // Reconnexion automatique après 1s
     setTimeout(connectWebSocket, 1000);
   });
 
   ws.addEventListener("error", (e) => {
     console.error("[FOV WS] Erreur WebSocket:", e);
+  });
+}
+
+function connectSignalK() {
+  const ws = new WebSocket("ws://localhost:3000/signalk/v1/stream");
+
+  ws.addEventListener("open", () => {
+    console.log("[Signal K] Connexion WebSocket SignalK ouverte ✅");
+
+    ws.send(JSON.stringify({
+      context: "vessels.self",
+      subscribe: [{
+        path: "navigation.headingTrue",
+        period: 500
+      }]
+    }));
+  });
+
+  ws.addEventListener("message", (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.updates) {
+        data.updates.forEach(update => {
+          update.values.forEach(val => {
+            if (val.path === "navigation.headingTrue") {
+              let headingRad = val.value;
+              latestHeading = (headingRad * 180 / Math.PI) % 360;
+              if (latestHeading < 0) latestHeading += 360;
+              console.log(`[Signal K] Heading reçu : ${latestHeading.toFixed(1)}°`);
+            }
+          });
+        });
+      }
+    } catch (e) {
+      console.warn("[Signal K] Erreur parsing:", e);
+    }
+  });
+
+  ws.addEventListener("close", () => {
+    console.warn("[Signal K] Déconnecté ❌ → Reconnexion...");
+    setTimeout(connectSignalK, 1000);
   });
 }
 
@@ -116,7 +158,8 @@ function connectWebSocket() {
       mapCanvas = canvas;
       createOverlay();
       maintainOverlay();
-      connectWebSocket(); // Connexion au flux en temps réel
+      connectWebSocket();   // Bearing relatif
+      connectSignalK();     // Heading absolu
     }
   }, 500);
 })();
