@@ -31,39 +31,56 @@ function createOverlay() {
   console.log("[FOV OVERLAY] Overlay injecté ✅");
 }
 
-function drawLine() {
+function drawFOV(angleDeg = 0, fovDeg = 90) {
   if (!overlay) return;
   const ctx = overlay.getContext("2d");
   ctx.clearRect(0, 0, overlay.width, overlay.height);
-  ctx.strokeStyle = "red";
-  ctx.lineWidth = 3;
+
+  const centerX = overlay.width / 2;
+  const centerY = overlay.height / 2;
+
+  const radius = 500; // Distance (pixels) du cône
+
+  const angleRad = angleDeg * Math.PI / 180;
+  const halfFovRad = fovDeg / 2 * Math.PI / 180;
+
+  const startAngle = angleRad - halfFovRad;
+  const endAngle = angleRad + halfFovRad;
+
+  const x1 = centerX + radius * Math.cos(startAngle);
+  const y1 = centerY + radius * Math.sin(startAngle);
+  const x2 = centerX + radius * Math.cos(endAngle);
+  const y2 = centerY + radius * Math.sin(endAngle);
+
+  ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(overlay.width, overlay.height);
-  ctx.stroke();
+  ctx.moveTo(centerX, centerY);
+  ctx.lineTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.closePath();
+  ctx.fill();
 }
+
 
 function maintainOverlay() {
   setInterval(() => {
     const current = document.getElementById("fov-overlay");
     const canvasCheck = findMapCanvas();
 
-    if (!canvasCheck) {
-      console.warn("[FOV OVERLAY] Canvas principal non trouvé.");
-      return;
-    }
+    if (!canvasCheck) return;
 
     if (!mapCanvas || canvasCheck !== mapCanvas) {
-      console.log("[FOV OVERLAY] Mise à jour du canvas source.");
       mapCanvas = canvasCheck;
     }
 
     if (!current || !current.isConnected || current.width !== mapCanvas.width || current.height !== mapCanvas.height) {
       createOverlay();
-      drawLine();
     }
-  }, 500); // vérifie toutes les 0.5s
+
+    drawFOV(0); // <- Angle fixe pour l’instant (0° = nord / haut)
+  }, 500);
 }
+
 
 (function init() {
   console.log("[FOV OVERLAY] Initialisation...");
@@ -73,7 +90,7 @@ function maintainOverlay() {
       clearInterval(check);
       mapCanvas = canvas;
       createOverlay();
-      drawLine();
+      drawFOV();
       maintainOverlay();
     }
   }, 500);
