@@ -96,15 +96,9 @@ function connectWebSocket() {
       }
 
       // FOV updates: utilise la dernière valeur reçue
-      if ("dataVWFOV" in data) {
-        currentFOV = data.dataVWFOV;
-        console.log("[FOV WS] dataVWFOV reçu :", currentFOV);
-      } else if ("dataWFOV" in data) {
-        currentFOV = data.dataWFOV;
-        console.log("[FOV WS] dataWFOV reçu :", currentFOV);
-      } else if ("dataNFOV" in data) {
-        currentFOV = data.dataNFOV;
-        console.log("[FOV WS] dataNFOV reçu :", currentFOV);
+      if ("camera_angle" in data) {
+        currentFOV = data.camera_angle;
+        console.log("[FOV WS] camera_angle reçu :", currentFOV);
       }
 
     } catch (e) {
