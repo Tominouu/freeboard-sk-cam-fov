@@ -4,6 +4,7 @@ let overlay = null;
 let mapCanvas = null;
 let latestBearing = 0;      // en degrés
 let latestHeading = 0;      // en degrés
+let currentFOV = 90;        // valeur par défaut
 let connected = false;
 
 function findMapCanvas() {
@@ -72,10 +73,9 @@ function maintainOverlay() {
       createOverlay();
     }
 
-    // Calcule l'angle absolu combiné
     const combined = (latestHeading + latestBearing) % 360;
-    drawFOV(combined);
-  }, 100); // 10x/sec
+    drawFOV(combined, currentFOV);
+  }, 100);
 }
 
 function connectWebSocket() {
@@ -89,10 +89,24 @@ function connectWebSocket() {
   ws.addEventListener("message", (event) => {
     try {
       const data = JSON.parse(event.data);
+
       if ("rel_bearing" in data) {
         latestBearing = data.rel_bearing;
         console.log("[FOV WS] rel_bearing reçu :", latestBearing.toFixed(2));
       }
+
+      // FOV updates: utilise la dernière valeur reçue
+      if ("dataVWFOV" in data) {
+        currentFOV = data.dataVWFOV;
+        console.log("[FOV WS] dataVWFOV reçu :", currentFOV);
+      } else if ("dataWFOV" in data) {
+        currentFOV = data.dataWFOV;
+        console.log("[FOV WS] dataWFOV reçu :", currentFOV);
+      } else if ("dataNFOV" in data) {
+        currentFOV = data.dataNFOV;
+        console.log("[FOV WS] dataNFOV reçu :", currentFOV);
+      }
+
     } catch (e) {
       console.warn("[FOV WS] Erreur JSON:", e);
     }
@@ -158,8 +172,8 @@ function connectSignalK() {
       mapCanvas = canvas;
       createOverlay();
       maintainOverlay();
-      connectWebSocket();   // Bearing relatif
-      connectSignalK();     // Heading absolu
+      connectWebSocket();
+      connectSignalK();
     }
   }, 500);
 })();
