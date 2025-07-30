@@ -90,9 +90,9 @@ function connectWebSocket() {
     try {
       const data = JSON.parse(event.data);
 
-      if ("rel_bearing" in data) {
-        latestBearing = data.rel_bearing;
-        console.log("[FOV WS] rel_bearing reçu :", latestBearing.toFixed(2));
+      if ("camera_bearing" in data) {
+        latestBearing = data.camera_bearing;
+        console.log("[FOV WS] camera_bearing reçu :", latestBearing.toFixed(2));
       }
 
       // FOV updates: utilise la dernière valeur reçue
