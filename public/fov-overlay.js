@@ -1,46 +1,13 @@
-console.log("[FOV OVERLAY] Chargement avec gestion de disparition...");
+console.log("[FOV OVERLAY] Initialisation avec WebSocket dynamique...");
 
 let overlay = null;
 let mapCanvas = null;
-
-// Données du bateau
-let boatData = {
-  heading: 0 // en degrés
-};
-
-// Connexion WebSocket à Signal K
-const sk = new WebSocket('ws://localhost:3000/signalk/v1/stream?subscribe=none');
-
-sk.onopen = () => {
-  console.log("[FOV OVERLAY] Connexion Signal K établie");
-  sk.send(JSON.stringify({
-    context: "vessels.self",
-    subscribe: [
-      { path: "navigation.headingTrue", period: 500 }
-    ]
-  }));
-};
-
-sk.onmessage = (msg) => {
-  const data = JSON.parse(msg.data);
-  if (data.updates) {
-    data.updates.forEach(update => {
-      update.values.forEach(v => {
-        if (v.path === "navigation.headingTrue" && v.value != null) {
-          // Radians → Degrés
-          boatData.heading = v.value * 180 / Math.PI;
-        }
-      });
-    });
-  }
-};
+let latestBearing = 0; // Valeur par défaut
+let connected = false;
 
 function findMapCanvas() {
   const canvas = document.querySelector("canvas");
-  if (canvas && canvas.offsetWidth > 0 && canvas.offsetHeight > 0) {
-    return canvas;
-  }
-  return null;
+  return canvas && canvas.offsetWidth > 0 && canvas.offsetHeight > 0 ? canvas : null;
 }
 
 function createOverlay() {
@@ -70,18 +37,16 @@ function drawFOV(angleDeg = 0, fovDeg = 90) {
 
   const centerX = overlay.width / 2;
   const centerY = overlay.height / 2;
+  const radius = 500; // Longueur du cône en pixels
 
-  const radius = 500; // pixels
+  // 0° = droite → pour tourner à partir du haut, on décale de -90°
   const angleRad = (angleDeg - 90) * Math.PI / 180;
-  const halfFovRad = fovDeg / 2 * Math.PI / 180;
+  const halfFovRad = (fovDeg / 2) * Math.PI / 180;
 
-  const startAngle = angleRad - halfFovRad;
-  const endAngle = angleRad + halfFovRad;
-
-  const x1 = centerX + radius * Math.cos(startAngle);
-  const y1 = centerY + radius * Math.sin(startAngle);
-  const x2 = centerX + radius * Math.cos(endAngle);
-  const y2 = centerY + radius * Math.sin(endAngle);
+  const x1 = centerX + radius * Math.cos(angleRad - halfFovRad);
+  const y1 = centerY + radius * Math.sin(angleRad - halfFovRad);
+  const x2 = centerX + radius * Math.cos(angleRad + halfFovRad);
+  const y2 = centerY + radius * Math.sin(angleRad + halfFovRad);
 
   ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
   ctx.beginPath();
@@ -107,20 +72,51 @@ function maintainOverlay() {
       createOverlay();
     }
 
-    drawFOV(boatData.heading || 0); // Heading dynamique
-  }, 500);
+    drawFOV(latestBearing); // Mise à jour du FOV avec la dernière valeur reçue
+  }, 100); // Rafraîchissement 10x/seconde
+}
+
+function connectWebSocket() {
+  const ws = new WebSocket("ws://localhost:8765");
+
+  ws.addEventListener("open", () => {
+    console.log("[FOV WS] Connexion WebSocket établie ✅");
+    connected = true;
+  });
+
+  ws.addEventListener("message", (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if ("rel_bearing" in data) {
+        latestBearing = data.rel_bearing; // Affectation dynamique
+        console.log("[FOV WS] Bearing reçu :", latestBearing.toFixed(2));
+      }
+    } catch (e) {
+      console.warn("[FOV WS] Erreur JSON:", e);
+    }
+  });
+
+  ws.addEventListener("close", () => {
+    console.warn("[FOV WS] Déconnexion WebSocket ❌");
+    connected = false;
+    // Reconnexion automatique après 1s
+    setTimeout(connectWebSocket, 1000);
+  });
+
+  ws.addEventListener("error", (e) => {
+    console.error("[FOV WS] Erreur WebSocket:", e);
+  });
 }
 
 (function init() {
-  console.log("[FOV OVERLAY] Initialisation...");
   const check = setInterval(() => {
     const canvas = findMapCanvas();
     if (canvas) {
       clearInterval(check);
       mapCanvas = canvas;
       createOverlay();
-      drawFOV();
       maintainOverlay();
+      connectWebSocket(); // Connexion au flux en temps réel
     }
   }, 500);
 })();
